@@ -6,10 +6,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/user"
 	"strings"
 )
 
-const IRCDIR = "./irc/"
+var IRCDIR string
 
 func parseURL(url string) string {
 	paths := strings.Split(url, "channel/")
@@ -19,6 +20,7 @@ func parseURL(url string) string {
 	}
 	return path
 }
+
 func getHandler(w http.ResponseWriter, r *http.Request) {
 	url := parseURL(r.URL.Path)
 	buffer, _ := ioutil.ReadFile(IRCDIR + url + "/out")
@@ -48,7 +50,7 @@ func auth(fn http.HandlerFunc, user string, pass string) http.HandlerFunc {
 		checkUser, checkPass, _ := r.BasicAuth()
 		if user != "" && pass != "" {
 			if user != checkUser && pass != checkPass {
-				w.Header().Set("WWW-Authenticate", "Basic realm=\"Zork\"")
+				w.Header().Set("WWW-Authenticate", "Basic realm=\"IRC\"")
 				http.Error(w, "Unauthorized.", http.StatusUnauthorized)
 				return
 			}
@@ -58,8 +60,21 @@ func auth(fn http.HandlerFunc, user string, pass string) http.HandlerFunc {
 }
 
 func main() {
-	_auth := flag.String("a", "", "Add authentication")
+	_auth := flag.String("a", "", "Authentication. Example: user:pass (default none)")
+	path := flag.String("i", "", "IRC directory")
+	port := flag.String("p", "8003", "Port of the server")
 	flag.Parse()
+
+	if *path == "" {
+		usr, err := user.Current()
+		if err != nil {
+			log.Fatal("Could not get home directory", err)
+		}
+		IRCDIR = usr.HomeDir + "/irc"
+	} else {
+		IRCDIR = *path
+	}
+
 	user := ""
 	pass := ""
 	if *_auth != "" {
@@ -67,6 +82,7 @@ func main() {
 		user = info[0]
 		pass = info[1]
 	}
+
 	http.HandleFunc("/", auth(indexHandler, user, pass))
-	log.Fatal(http.ListenAndServe(":8003", nil))
+	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }
